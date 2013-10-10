@@ -9,15 +9,15 @@
 
 =head1 SYPNOSIS
 
- extract_snp_freq.pl [-h] -target <input_mpileup_file> -var <input_varscan target file > -ref <varscan file of the reference > -o <output_file> [-c 10 -f 90]
+ extract_snp_freq.pl [-h] -target <input_mpileup_file> -var <input_varscan target file > -ref <varscan file of the reference > -o <output_file> [-c 10 -f 90 -m 10 ]
 
 =head1 DESCRIPTION
 
  This script reads 3 files: mpileup and varscan files of a target genome ( a genome containing some SNPs of interest from a known or unknown origin ) 
- and a varscan file of a reference genome ( for example a possible donor for the target SNPs) .
- It is a good idea to use the options for filtering  the varscan file of the reference genome, and extract SNPs with a certain coverage (-c )  and frequency ( -f )  cutoff
+ and a varscan file of a reference genome ( for example a possible donor for the target SNPs).
+ It is a good idea to use the options for filtering  the varscan file of the reference genome, and extract SNPs with a certain coverage (-c )  and frequency ( -f )  cutoff, and filtering by coverage from the target mpileup file ( -m ).
 
- based on chromosome matching positions, a subset mpileup file will be generated, along with the allele frequency from the target varscan file in the last column of the new file.
+ The output is a  subset mpileup file based on matching chromosome positions,  along with the alternative allele from the reference genomes and the allele frequency from the target varscan file in the last 2 columns of the new file.
 
  Next step would be for example:
  * Plotting the SNPs 
@@ -46,11 +46,15 @@ B<output_file>            output file (mandatory)
 
 =item -c 
 
-B<coverage>   coverage cutoff for selecting SNPs from the reference varscan file
+B<coverage>   coverage cutoff for selecting SNPs from the reference varscan file (optional) 
 
 =item -f
 
-B<frequency>  Frequency cutoff for selecting SNPs from the reference varscan file 
+B<frequency>  Frequency cutoff for selecting SNPs from the reference varscan file (optional)
+
+=item -m
+
+B<mpileup coverage> coverage cutoff for filtering target positions with low genome coverage (optional)
 
 =item -h
 
@@ -76,6 +80,7 @@ use Pod::Usage;
 my ( $target_mpileup, $target_var, $ref_var, $out, $help); 
 my $coverage = 1;
 my $frequency = 1;
+my $mcov = 1;
 
 GetOptions (
     "target=s" => \$target_mpileup,    # string
@@ -84,12 +89,14 @@ GetOptions (
     "out=s"    => \$out,
     "c|cov=i"  => \$coverage,
     "f|freq=i" => \$frequency,
+    "mcov|m=i" => \$mcov,
     "help"  => \$help)   # flag
     or  pod2usage(-verbose  => 2);
 
 if ($help || !$target_mpileup || !$target_var || !$ref_var || !$out)  { pod2usage(-verbose  => 2); } 
 
-
+print STDERR " c = $coverage , f = $frequency , m = $mcov \n";
+exit;
 # list file is varscan with chr. in column 1 and position in clumn 2
 
 open (MPILEUP, "<$target_mpileup") || die "Cannot open target mpileup file $target_mpileup.\n";
@@ -142,22 +149,19 @@ while ( <TVAR> ) {
 while ( <MPILEUP> ) {  # my mpileup file. Column 1 is chromosome name, 2 is the position of the SNP, 4 is the coverage
     my $pileup_line = $_;
     chomp $pileup_line;
-    if (  $pileup_line =~ (/^SL2.40ch/)  )  {
-	my @cells= split (/\t/,$pileup_line);
-	my $chr = $cells[0];
-	my $pos = $cells[1];
-	my $nuc = $cells[2];
-	my $cov1 = $cells[3];
-	if ( $chr eq "SL2.40ch00" ) { next ; }
-	if (exists $ref_varscan{$chr . ":" . $pos}) {
-	    my $var_freq = $ref_varscan{$chr . ":" . $pos}->{freq};
-	    my $var_allele = $ref_varscan{$chr . ":" . $pos}->{allele};
-	    print STDERR "mpileup: $chr \t $pos \t $var_allele \t $var_freq \n" ;
-	    write_file($out, { append => 1} , ( $pileup_line, "\t", $var_allele , "\t", $var_freq ,"\n")  );
-	}
-	else {
-	    next;
-	}
+    my @cells= split (/\t/,$pileup_line);
+    my $chr = $cells[0];
+    my $pos = $cells[1];
+    my $nuc = $cells[2];
+    my $cov = $cells[3]; #optional filtering by mpileup coverage
+    if ( ( exists $ref_varscan{$chr . ":" . $pos} ) && ( $cov >= $mcov )  ) {
+	my $var_freq = $ref_varscan{$chr . ":" . $pos}->{freq};
+	my $var_allele = $ref_varscan{$chr . ":" . $pos}->{allele};
+	print STDERR "mpileup: $chr \t $pos \t $var_allele \t $cov \t" ;
+	if ($var_freq) { print STDERR "$var_freq"; }
+	print STDERR "\n" ;
+	no warnings 'uninitialized';
+	write_file($out, { append => 1} , ( $pileup_line, "\t", $var_allele , "\t", $var_freq ,"\n")  );
     }
     else {
 	next;
