@@ -32,11 +32,14 @@ This subtracting tage can be run multiple times, if you wish to look at each gen
 
 B<input mpileup file>             input mpileup file of the target genome (mandatory)
 
-=item --intersect | i
+=item --mpileup | m
 
 B<input mpileup file (s)>           input mpileup file(s) of a second genome (or more, comma separated lists are supported), to be removed from file #1 above 
 
-    
+=item --cov | c
+
+B<coverage cutoff> cutoff for ignoring SNPs in positions that are not covered well in the intersecting genome(s) 
+   
 =item -o
 
 B<output_file>            output file (mandatory)
@@ -64,66 +67,157 @@ use Getopt::Long;
 use Pod::Usage;
 use Carp qw /croak/;
 
-my ( $target_mpileup, @intersect_mpileup, $out, $help); 
+my ( $target_mpileup, @intersect_freq, @intersect_mpileup, $out, $help); 
+my $intersect_coverage = 1;
 
 GetOptions (
     "target|t=s"    => \$target_mpileup,    # string
-    "intersect|i=s" => \@intersect_mpileup, # string
-    "out=s"    => \$out,
+    "intersect|i=s" => \@intersect_freq, 
+    "mpileup|m=s"   => \@intersect_mpileup,
+    "cov|c=i"       => \$intersect_coverage,
+    "out|o=s"    => \$out,
     "help"  => \$help)   # flag
     or  pod2usage(-verbose  => 2);
 
-if ($help || !$target_mpileup || !@intersect_mpileup || !$out)  { pod2usage(-verbose  => 2); } 
+if ($help || !$target_mpileup || !@intersect_mpileup  || !$out)  { pod2usage(-verbose  => 2); } 
 
-# list file is varscan with chr. in column 1 and position in clumn 2
 
 open (TARGET, "<$target_mpileup") || die "Cannot open target mpileup file $target_mpileup.\n";
 
+@intersect_freq = split(/,/,join(',',@intersect_freq));
 @intersect_mpileup = split(/,/,join(',',@intersect_mpileup));
 my $err = $out . ".err" ;
-my %intersect;
 
-foreach my $file (@intersect_mpileup) {
+## this was when we lookied ony at varscan files. Now looking at mpileup because it does not really matter if the intersecting genomes have shared SNPs
+### We want to look at coverage threshold, and if the reference SNP is unique to that genome in each position (i.e. if any oth the intersecting genomes has the same nucleotide in that position, the SNP is no longer considered unique 
+
+#############################
+#my %intersect;
+
+#foreach my $file (@intersect_freq) {
     #remove trailing and leading spaces
-    $file =~ s/^\s(.?)\s*/$1/;
-    open (INTERSECT, "<$file") || croak "Cannot open intersect mpileup file $file.\n";
-    print STDERR "Intersect file: $file \n\n";
+#    $file =~ s/^\s(.?)\s*/$1/;
+#    open (INTERSECT, "<$file") || croak "Cannot open intersect mpileup file $file.\n";
+#    print STDERR "Intersect file: $file \n\n";
 
     # parse the intersecting file 
-    while ( <INTERSECT> ) {
-	my $var_line = $_;
-	chomp($var_line);
-	my @var = split ("\t", $var_line);
-	my $chr = $var[0];
-	my $pos = $var[1];
-	my $var_allele = $var[6];
-	my $existing_allele = $intersect{$chr . ":" . $pos } ;
-	my $allele_list = $var_allele;
-	if ($existing_allele) { $allele_list = join("\t" , ( $existing_allele, $var_allele ) ) ; } 
-	$intersect{$chr . ":" . $pos } = $allele_list;
-	print STDERR " Intersect : $chr \t $pos \t allele = $allele_list \n";
-    }
-}
+#    while ( <INTERSECT> ) {#
+#	my $var_line = $_;#
+#	chomp($var_line);
+#	my @var = split ("\t", $var_line);
+#	my $chr = $var[0];
+#	my $pos = $var[1];
+#	my $var_allele = $var[6];
+#	my $existing_allele = $intersect{$chr . ":" . $pos } ;
+#	my $allele_list = $var_allele;
+#	if ($existing_allele) { $allele_list = join("\t" , ( $existing_allele, $var_allele ) ) ; } 
+#	$intersect{$chr . ":" . $pos } = $allele_list;
+#	print STDERR " Intersect : $chr \t $pos \t allele = $allele_list \n";
+ #   }
+#}
 
+################################################################################
+#print STDERR " Target : $chr \t $pos \t allele = $target_allele ";
+my %error;
+my %target;
+my ($chr , $prev_chr, $pos);
 
-#print STDERR " Target : $chr \t $pos \t allele = $target_allele ";                                                                                                 
+print STDERR " TARGET file $target_mpileup \n\n";
 
+#parse the target mpileup subset file containing the candidate SNPs from the genome of interest
 while ( <TARGET> ) {
     my $line = $_;
     chomp($line);
     my @tar = split ("\t", $line);
-    my $chr = $tar[0];
-    my $pos = $tar[1];
+    $chr = $tar[0];
+    $pos = $tar[1];
     my $target_allele = $tar[6];
+    no warnings 'uninitialized' ;
+    if ( $chr ne $prev_chr ) { print STDERR "$chr\n"; }
+    $prev_chr = $chr;
 
-    my $var_allele = $intersect{$chr . ":" . $pos };
+    #############Write to out files only after checking the intersecting genomes 
+
+
+    ##my $var_allele = $intersect{$chr . ":" . $pos };
     # if an allele exists in the same position in the intersect file, discard it. 
     # print in the error file both alleles for counting which alleles are identical and which are different 
-    if ($var_allele) {
-	write_file($err, {append => 1 } , ( ( join ("\t" , ( $chr, $pos, $target_allele, $var_allele) ) ) , "\n" ) ) ;
-    } else {
-	print STDERR " Target : $chr \t $pos \t allele = $target_allele \n";                                                                                        
-	write_file($out, { append => 1} , ( $line,"\n")  );
+    ##if ($var_allele) {
+##	$error{ $chr . ":" . $pos }->{target_allele} = $target_allele;
+##	$error{ $chr . ":" . $pos }->{var_allele} = $var_allele;
+	
+	#write_file($err, {append => 1 } , ( ( join ("\t" , ( $chr, $pos, $target_allele, $var_allele) ) ) , "\n" ) ) ;
+  ##  } else {
+##    print STDERR " Target : $chr \t $pos \t allele = $target_allele \n";                                                                              
+    $target{ $chr . ":" . $pos }->{line}=  $line ;
+    $target{ $chr . ":" . $pos }->{target_allele}=  $target_allele ;
+
+	#write_file($out, { append => 1} , ( $line,"\n")  );
+    ##}
+}
+
+#look into the mpileup files of the intersecting genomes for surther filtering by
+#looking at minimum coverage required, and if the allele in the target file is unique (must be unique when compared to all intersecting files)
+
+foreach my $mpileup_file (@intersect_mpileup) {
+    open (MPILEUP, "<$mpileup_file") || croak "Cannot open intersect mpileup file $mpileup_file.\n";
+    my %mpile;
+    print STDERR "Finding target-mpileup file matches in file $mpileup_file \n";
+    #############
+    while ( <MPILEUP> ) {
+	my $line = $_;
+	chomp($line);
+	my @mp = split ("\t", $line);
+	$chr = $mp[0];
+	if ( $chr ne $prev_chr ) { print STDERR "$chr\n"; }  ;
+	$prev_chr = $chr;
+
+	$pos = $mp[1];
+	my $allele = $mp[2];
+	my $coverage = $mp[3];
+	if (exists $target{ $chr . ":" . $pos } ) {
+	    my $target_allele = $target{ $chr . ":" . $pos }->{target_allele} ;
+	    if ( $target_allele && ( $coverage < $intersect_coverage || $allele eq  $target_allele ) ) {
+		delete $target{ $chr . ":" . $pos } ;
+		write_file( $err , { append => 1 }, ( join("\t" , ( $chr, $pos, $mpileup_file , $target_allele , $allele , $coverage ) ) , "\n" ) ) ;
+	    }
+	}
     }
 }
+    #############
+###print STDERR "Finding target-mpileup file matches in file $mpileup_file \n";
+    
+#    foreach my $key ( sort keys %target ) { #
+#	( $chr , $pos ) = split (":" , $key) ;
+#	if ( $chr ne $prev_chr ) { print STDERR "$chr\n"; }
+#	$prev_chr = $chr;
+
+	#my $match = $mpile{ $key } ;
+	#my $allele = $match->{allele};
+	#my $coverage = $match->{coverage};
+#	my $target_allele = $target{ $key }->{target_allele};
+#	my $match_string = $chr . ":" . $pos . "-" . $pos ;
+#	my $fasta = "/export/home/naama/ITAG2.3/ITAG_pre2.3_genomic.fasta";
+#	my $mline = `samtools mpileup -r $match_string -C 50  -f $fasta  $mpileup_file ` ;# || die "Cannot execute command samtools mpileup \n\n";
+#	if ($mline) {
+#	    my @fields = split("\t" , $mline) ;
+#	    my $allele = $fields[2];
+#	    my $coverage = $fields[3];
+	    # if the coverage for this position in the mpileup file is lower than the cutoff coverage ( -c )
+	    # and/or the target allele is not unique ( similar to the mpileup allele in the intersect file )
+	    # remove this position from the target file 
+#	    if ( $coverage < $intersect_coverage || $allele eq  $target_allele ) {
+#		print STDERR "DELETING $key : coverage = $coverage , allele = $allele target = $target_allele\n";
+#		write_file( $err , { append => 1 }, ( join("\t" , ( $chr, $pos, $mpileup_file , $target_allele , $allele , $coverage ) ) , "\n" ) ) ; 
+#		delete  $target{ $key } ;
+#	    }
+#	}
+ #   }
+#}
+
+# need to write to output file at the end, after looping through all genomes
+foreach my $key (sort  keys  %target ) { 
+    write_file($out, { append => 1} , ( $target{ $key }->{line} ,"\n")  );
+}
+
 
