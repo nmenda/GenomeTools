@@ -107,6 +107,8 @@ while ( <TARGET> ) {
     $prev_chr = $chr;
 
     #############Write to out files only after checking the intersecting genomes 
+    $target{ $chr . ":" . $pos }->{pos} = $pos ;
+    $target{ $chr . ":" . $pos }->{chr} = $chr ; 
     $target{ $chr . ":" . $pos }->{line}=  $line ;
     $target{ $chr . ":" . $pos }->{target_allele}=  $target_allele ;
 }
@@ -140,8 +142,7 @@ foreach my $mpileup_file (@intersect_mpileup) {
     }
 }
 # need to write to output file at the end, after looping through all genomes
-foreach my $key (sort {$a<=>$b} keys  %target ) { 
+foreach my $key (sort { ($target{$a}->{chr} cmp $target{$b}->{chr} ) ||  ( $target{$a}->{pos} <=> $target{$b}->{pos} ) } keys %target )   { 
     write_file($out, { append => 1} , ( $target{ $key }->{line} ,"\n")  );
 }
-
 
