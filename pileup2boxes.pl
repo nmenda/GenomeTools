@@ -42,7 +42,7 @@ B<help>                   print the help
 
 =head1 DESCRIPTION
 
- This script count ocurrences for a tab file (generally sequence coordinates).
+ This script count ocurrences from a tab delimited file (generally sequence coordinates). These could be read from a .vcf file (the first 2 columns will be used)
 
  For example: pileup2boxes.pl -i myfile.tab -b 1000
 
@@ -70,7 +70,7 @@ B<help>                   print the help
 
 use strict;
 use warnings;
-use Math::Round qw( nlowmult );
+use Math::Round qw( nhimult );
 use Getopt::Std;
 use File::Slurp;
 
@@ -115,7 +115,7 @@ print STDERR "\n\n2) Parsing the $in file.\n\n";
 open my $ifh, '<', $in or die("ERROR to open the file $in: $!\n");
 
 my %id = ();
-my $crr_box = 0;
+my $crr_box = $box;
 
 my $l = 0;
 
@@ -131,24 +131,20 @@ while(<$ifh>) {
     
     print STDERR "\n$chr \t $pos \t  box = $crr_box\n" ;
     if (exists $id{ $chr }) {
-	if ( nlowmult($box, $pos) == $crr_box) {
+	if ( nhimult($box, $pos) == $crr_box) {
 	    print STDERR "INCREMENTING box $crr_box ($chr \t $pos ) \n";
 	    $id{ $chr }->{$crr_box} += 1;
 	}
 	else {
-	    $crr_box = nlowmult($box , $pos);
+	    $crr_box = nhimult($box , $pos);
 	    print STDERR "NEW BOX: $crr_box ( $chr \t $pos) \n";
 	    $id{ $chr }->{$crr_box} = 1;
 	}
     }
     else {
-	$crr_box = nlowmult($box , $pos);
+	$crr_box = nhimult($box , $pos);
 	print STDERR  "new chromosome $chr. Box = $box , crr_box = $crr_box\n";
 	print STDERR "NEW BOX: $crr_box ( $chr \t $pos) \n";
-        #while ( $pos > $crr_box) {
-	#    $crr_box = nearest_floor($box , $pos);
-	#    print STDERR " Box = $box , curr_box = $crr_box\n";
-	#}
 	$id{ $chr } = { $crr_box =>  1};
     }
 }
@@ -159,34 +155,33 @@ print STDERR "3) Producing output .\n\n";
 ## It will scan the sizes
 
 foreach my $chr (sort keys %sizes) {
+    if (defined $id{$chr} ) {
+	my $max = $sizes{$chr};
+	my %feats = %{$id{$chr}};
+	my $c = $box;
 
-    my $max = $sizes{$chr};
-    my %feats = %{$id{$chr}};
-    my $i = $box;
-    my $c = 0;
-
-    while($c <= $max) {
+	while($c <= $max) {
 	
-	if  ($c < $max ) {
-	    if (exists $feats{$c}) {
-		print STDERR "Found box: $chr : $c\n";
-		write_file($out, { append => 1} , ( "$chr\t$c\t$feats{$c}\n")  );
+	    if  ($c < $max ) {
+		if (exists $feats{$c}) {
+		    print STDERR "Found box: $chr : $c\n";
+		    write_file($out, { append => 1} , ( "$chr\t$c\t$feats{$c}\n")  );
+		}
+		else {
+		    write_file($out, { append => 1} , ( "$chr\t$c\t0\n")  );
+		}
 	    }
-	    else {
-		write_file($out, { append => 1} , ( "$chr\t$c\t0\n")  );
+	    if ($c == $max) {
+		if (exists $feats{$c}) {
+		    write_file($out, { append => 1} , ( "$chr\t$c\t$feats{$c}\n")  );
+		}
+		else {
+		    write_file($out, { append => 1} , ( "$chr\t$c\t0\n")  );
+		}
 	    }
+	    $c += $box;
 	}
-	if ($c == $max) {
-	    if (exists $feats{$c}) {
-		write_file($out, { append => 1} , ( "$chr\t$c\t$feats{$c}\n")  );
-	    }
-	    else {
-		write_file($out, { append => 1} , ( "$chr\t$c\t0\n")  );
-	    }
-	}
-	$c += $box;
     }
-    
 }
 
 print STDERR "\n\nDONE\n\n";
