@@ -74,8 +74,8 @@ use Math::Round qw( nhimult );
 use Getopt::Std;
 use File::Slurp;
 
-our ($opt_i, $opt_s, $opt_b, $opt_h, $opt_o);
-getopts("i:s:b:o:h");
+our ($opt_i, $opt_s, $opt_b, $opt_h, $opt_o, $opt_c);
+getopts("i:s:b:o:c:h");
 if (!$opt_i && !$opt_s && !$opt_b && !$opt_h) {
     print "There are n\'t any tags. Print help\n\n";
     help();
@@ -119,6 +119,10 @@ my $crr_box = $box;
 
 my $l = 0;
 
+if ($opt_c) { 
+    print STDERR "opt_c : Counting sum of coverage values.\n\n";
+}
+
 while(<$ifh>) {
     chomp($_);
     $l++;
@@ -128,24 +132,28 @@ while(<$ifh>) {
     my @data = split(/\t/, $_);
     my $pos = $data[1];
     my $chr = $data[0];
-    
-    print STDERR "\n$chr \t $pos \t  box = $crr_box\n" ;
+    my $value = $data[2];
+    #print STDERR "\n$chr \t $pos \t  box = $crr_box\n" ;
     if (exists $id{ $chr }) {
 	if ( nhimult($box, $pos) == $crr_box) {
-	    print STDERR "INCREMENTING box $crr_box ($chr \t $pos ) \n";
+	    #print STDERR "INCREMENTING box $crr_box ($chr \t $pos ) \n";
+	    if ($opt_c) { $id{ $chr }->{$crr_box} += ( $value -1 ) ; }
 	    $id{ $chr }->{$crr_box} += 1;
 	}
 	else {
 	    $crr_box = nhimult($box , $pos);
-	    print STDERR "NEW BOX: $crr_box ( $chr \t $pos) \n";
-	    $id{ $chr }->{$crr_box} = 1;
+	    #print STDERR "NEW BOX: $crr_box ( $chr \t $pos) \n";
+            if($opt_c) { $id{ $chr }->{$crr_box} =  $value  ; }
+	    else { $id{ $chr }->{$crr_box} = 1; }
 	}
     }
     else {
 	$crr_box = nhimult($box , $pos);
 	print STDERR  "new chromosome $chr. Box = $box , crr_box = $crr_box\n";
-	print STDERR "NEW BOX: $crr_box ( $chr \t $pos) \n";
-	$id{ $chr } = { $crr_box =>  1};
+	print STDERR "NEW BOX: $crr_box ( $chr \t $pos) value = $value \n";
+
+	if($opt_c) { $id{ $chr }->{$crr_box} = $value -1  ; }
+	else { $id{ $chr }->{ $crr_box } =  1; }
     }
 }
 print STDERR "\n\n";
@@ -155,6 +163,7 @@ print STDERR "3) Producing output .\n\n";
 ## It will scan the sizes
 
 foreach my $chr (sort keys %sizes) {
+    print STDERR "Binning chromosome $chr \n";
     if (defined $id{$chr} ) {
 	my $max = $sizes{$chr};
 	my %feats = %{$id{$chr}};
@@ -164,7 +173,7 @@ foreach my $chr (sort keys %sizes) {
 	
 	    if  ($c < $max ) {
 		if (exists $feats{$c}) {
-		    print STDERR "Found box: $chr : $c\n";
+		    #print STDERR "Found box: $chr : $c\n";
 		    write_file($out, { append => 1} , ( "$chr\t$c\t$feats{$c}\n")  );
 		}
 		else {
