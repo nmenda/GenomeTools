@@ -28,6 +28,12 @@ B<id_sizes_file>          id_sizes file (two columns: ID, SIZE) (mandatory)
 
 B<box_size>               box size (1000000 by default)
 
+=item -c 
+
+B<count coverage values> use this flag for a sum of coverage values. 
+Without it each line will be counted as 1, and the values for the coverage from column 3 will not be summed (default F) 
+
+
 =item -o 
 
 B<out_file>             Output file for writing. Defaults to infile.bins
@@ -75,7 +81,7 @@ use Getopt::Std;
 use File::Slurp;
 
 our ($opt_i, $opt_s, $opt_b, $opt_h, $opt_o, $opt_c);
-getopts("i:s:b:o:c:h");
+getopts("i:s:b:o:ch");
 if (!$opt_i && !$opt_s && !$opt_b && !$opt_h) {
     print "There are n\'t any tags. Print help\n\n";
     help();
@@ -137,7 +143,7 @@ while(<$ifh>) {
     if (exists $id{ $chr }) {
 	if ( nhimult($box, $pos) == $crr_box) {
 	    #print STDERR "INCREMENTING box $crr_box ($chr \t $pos ) \n";
-	    if ($opt_c) { $id{ $chr }->{$crr_box} += ( $value -1 ) ; }
+	    if ($opt_c) { $id{ $chr }->{$crr_box} += ( $value -1 ) ;}
 	    $id{ $chr }->{$crr_box} += 1;
 	}
 	else {
