@@ -29,6 +29,14 @@ B<gff3_annotation_file>      gff3 file with gene models for counting number of g
 
 B<out_file>             Output file for writing. Defaults to infile.sum
 
+=item --gff
+
+B<gff3 out file>     Output a gff3 file
+
+=item -p | --prefix
+
+B<sample prefix>     the name of the sample to be used as prefix for introgression name in the gff3 output file
+ 
 =item -h
 
 B<help>                   print the help
@@ -53,12 +61,14 @@ use File::Slurp qw (write_file);
 use Pod::Usage;
 use List::MoreUtils qw( minmax );
 
-my ( $in_file, $gff, $out, $help); 
+my ( $in_file, $gff, $out, $gff_out, $prefix, $help); 
 
 GetOptions (
     "infile|i=s"  => \$in_file,
-    "gff|g|a=s"   => \$gff,
+    "annot|a=s"   => \$gff,
     "out|o=s"     => \$out,
+    "gff|g=s"       => \$gff_out,
+    "p|prefix=s"  => \$prefix,
     "help"        => \$help)   # flag
     or  pod2usage(-verbose  => 2);
 
@@ -120,4 +130,7 @@ foreach my $introg_num (sort { $a <=> $b } keys %stats ) {
     my @filtered_s =  grep { $_ > $start } @filtered_e;
     $gene_count = scalar( @filtered_s) ;
     write_file( $out, { append => 1 } , join("\t" , ($introg_num, $chr, $bin_size, $real_start, $end, $snps, $gene_count, "\n") ) ) ;
+    if ( $gff) { 
+	write_file( $gff_out , { append => 1 }, join("\t" , ( $chr, "Introgression" , "match" , $real_start , $end, "." , "+" , "." , "ID=" . $prefix . "_introgression" . $introg_num , "\n")));
+    }
 }
